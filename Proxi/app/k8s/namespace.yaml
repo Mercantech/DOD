@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: proxi
+  labels:
+    app.kubernetes.io/name: proxi

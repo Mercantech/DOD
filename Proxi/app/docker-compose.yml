@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    restart: unless-stopped
+
+  # Postgres kører kun på control plane (Ansible bruger: --profile controlplane).
+  # Port 5432 eksponeres på host så workers kan forbinde til NODE_DB_HOST=<cp-ip>.
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: proxi
+      POSTGRES_PASSWORD: proxi
+      POSTGRES_DB: proxi
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    profiles:
+      - controlplane
+
+volumes:
+  pgdata:

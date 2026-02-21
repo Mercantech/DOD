@@ -1,0 +1,147 @@
+---
+# K3s: server på control plane, agent på workers. Traefik (ingress) følger med.
+# Kør først: ansible-playbook -i inventory/hosts.ini playbooks/k3s.yml
+# Derefter: playbooks/deploy-k8s.yml
+
+- name: Installér K3s server på control plane
+  hosts: k3s_control_plane
+  become: true
+  vars:
+    # Fuld version (v1.28 findes ikke – brug fx v1.28.15+k3s1)
+    k3s_version: "v1.28.15+k3s1"
+    cp_ip: "{{ hostvars[groups['k3s_control_plane'][0]].ansible_host }}"
+  tasks:
+    - name: Wait for system
+      wait_for_connection:
+        timeout: 120
+
+    - name: Tjek om K3s allerede kører
+      command: systemctl is-active k3s
+      register: k3s_svc_status
+      failed_when: false
+      changed_when: false
+
+    - name: Ryd K3s data fra fejlede kørsler (frigør plads)
+      file:
+        path: /var/lib/rancher/k3s/data
+        state: absent
+      when: k3s_svc_status.stdout != 'active'
+
+    - name: Ryd apt og journal (frigør ekstra plads på små VM'er)
+      block:
+        - name: apt clean
+          apt:
+            autoclean: true
+            clean: true
+          when: ansible_os_family == "Debian"
+          ignore_errors: true
+        - name: Begræns journal-størrelse
+          command: journalctl --vacuum-size=50M
+          changed_when: false
+          failed_when: false
+      when: k3s_svc_status.stdout != 'active'
+
+    - name: Tjek ledig plads på /var (K3s kræver mindst 512 MB)
+      shell: (df -B1 /var 2>/dev/null || df -B1 /) | tail -1 | awk '{ print $4 }'
+      register: var_free_out
+      changed_when: false
+      failed_when: false
+
+    - name: Fejl ved for lidt plads
+      fail:
+        msg: "For lidt plads på {{ inventory_hostname }}. K3s kræver mindst 512 MB ledig. Giv VM mere disk: i Proxmox (VM → Disk → resize) eller brug en større template i Terraform. Kør på noden: df -h"
+      when: var_free_out.stdout is defined and (var_free_out.stdout | trim | int) < (512 * 1024 * 1024)
+
+    # Ubuntu/Debian: K3s kræver ofte iptables-legacy (nftables giver "service failed to start")
+    - name: Skift til iptables-legacy (Debian/Ubuntu)
+      block:
+        - name: Sæt iptables til legacy
+          alternatives:
+            name: iptables
+            path: /usr/sbin/iptables-legacy
+          when: ansible_os_family == "Debian"
+        - name: Sæt ip6tables til legacy
+          alternatives:
+            name: ip6tables
+            path: /usr/sbin/ip6tables-legacy
+          when: ansible_os_family == "Debian"
+      rescue:
+        - name: iptables-legacy ikke tilgængelig – forsæt (kan stadig virke)
+          debug:
+            msg: "Vær opmærksom på at K3s kan fejle på start hvis iptables ikke er legacy."
+
+    - name: Install K3s server (curl-install)
+      shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} sh -s - server \
+          --tls-san {{ cp_ip }}
+      args:
+        creates: /usr/local/bin/k3s
+      register: k3s_install
+
+    - name: Start eller genstart K3s og vent på API
+      block:
+        - name: Start K3s service
+          systemd:
+            name: k3s
+            state: started
+            daemon_reload: true
+        - name: Vent på kubeconfig
+          wait_for:
+            path: /etc/rancher/k3s/k3s.yaml
+            state: present
+            timeout: 90
+      rescue:
+        - name: Vis K3s-service-log ved fejl
+          command: journalctl -u k3s.service -n 40 --no-pager
+          register: k3s_log
+          changed_when: false
+        - name: Udskriv log og fejl
+          debug:
+            msg: "K3s startede ikke. Log:\n{{ k3s_log.stdout }}"
+        - name: Fejl (med hint ved disk fuld)
+          fail:
+            msg: >-
+              K3s kunne ikke starte. Tjek log ovenfor.
+              Ved 'no space left on device': disken på {{ inventory_hostname }} er fuld.
+              Ryd plads: ssh til noden og kør
+                sudo systemctl stop k3s
+                sudo rm -rf /var/lib/rancher/k3s/data
+                sudo apt clean && sudo journalctl --vacuum-size=50M
+              eller giv VM mere disk i Proxmox/Terraform. Derefter kør playbooken igen.
+
+    - name: Læs node-token (til workers)
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_token
+
+    - name: Gem token til brug på workers
+      set_fact:
+        k3s_server_token: "{{ k3s_token.content | b64decode | trim }}"
+      when: k3s_token.content is defined
+
+- name: Installér K3s agent på workers
+  hosts: k3s_workers
+  become: true
+  vars:
+    k3s_version: "v1.28.15+k3s1"
+    cp_ip: "{{ hostvars[groups['k3s_control_plane'][0]].ansible_host }}"
+  tasks:
+    - name: Hent token fra control plane (sat i forrige play)
+      set_fact:
+        k3s_token_content: "{{ hostvars[groups['k3s_control_plane'][0]].k3s_server_token | default('') }}"
+      run_once: true
+
+    - name: Fail hvis token mangler
+      fail:
+        msg: "K3s token ikke fundet. Kør hele playbooken (ikke kun worker-playet), så control plane sætter k3s_server_token."
+      when: k3s_token_content is not defined or k3s_token_content == ""
+
+    - name: Install K3s agent
+      shell: |
+        set -e
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_version }} K3S_URL=https://{{ cp_ip }}:6443 K3S_TOKEN={{ hostvars[groups['k3s_control_plane'][0]].k3s_server_token }} sh -s - agent
+      args:
+        creates: /usr/local/bin/k3s
+      when: hostvars[groups['k3s_control_plane'][0]].k3s_server_token is defined
+  # Hvis token ikke blev sat (f.eks. idempotens), kan man manuelt skrive token til /tmp/k3s-token.txt på CP og bruge det
+  # Eller kør kun control plane-play én gang, så workers får token via set_fact.

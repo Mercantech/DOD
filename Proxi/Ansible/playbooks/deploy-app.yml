@@ -1,0 +1,133 @@
+---
+# Deploy Proxi Node-app (Docker) til alle noder + nginx load balancer på control plane.
+# Kør fra Proxmox eller med -i inventory/hosts.ini (og evt. ProxyJump).
+#
+# Eksempel: ansible-playbook -i inventory/hosts.ini playbooks/deploy-app.yml
+
+- name: Install Docker og kør app på alle noder
+  hosts: k3s_cluster
+  become: true
+  vars:
+    app_src: "{{ playbook_dir }}/../../app"
+    app_dest: "/opt/proxi-app"
+  tasks:
+    - name: Install Docker (apt)
+      block:
+        - name: Install Docker packages
+          apt:
+            name: ["ca-certificates", "curl", "gnupg"]
+            state: present
+            update_cache: true
+        - name: Add Docker GPG key
+          apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            state: present
+        - name: Add Docker repo
+          apt_repository:
+            repo: "deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') }}] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+            state: present
+            filename: docker
+        - name: Install docker-ce and docker-compose-plugin
+          apt:
+            name: ["docker-ce", "docker-ce-cli", "containerd.io", "docker-compose-plugin"]
+            state: present
+            update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Synkroniser app-mappe til {{ app_dest }}
+      synchronize:
+        src: "{{ app_src }}/"
+        dest: "{{ app_dest }}"
+        delete: true
+
+    - name: Skriv .env (control plane: inkl. DB på localhost via service-navn)
+      copy:
+        content: |
+          HOSTNAME={{ ansible_hostname }}
+          NODE_IP={{ ansible_default_ipv4.address }}
+          NODE_DB_HOST=db
+          NODE_DB_USER=proxi
+          NODE_DB_PASSWORD=proxi
+          NODE_DB_NAME=proxi
+        dest: "{{ app_dest }}/.env"
+        mode: "0644"
+      when: inventory_hostname in groups['k3s_control_plane']
+
+    - name: Skriv .env (workers: peger på Postgres på control plane)
+      copy:
+        content: |
+          HOSTNAME={{ ansible_hostname }}
+          NODE_IP={{ ansible_default_ipv4.address }}
+          NODE_DB_HOST={{ hostvars[groups['k3s_control_plane'][0]].ansible_host }}
+          NODE_DB_USER=proxi
+          NODE_DB_PASSWORD=proxi
+          NODE_DB_NAME=proxi
+        dest: "{{ app_dest }}/.env"
+        mode: "0644"
+      when: inventory_hostname in groups['k3s_workers']
+
+    - name: Byg og start containere (control plane: app + Postgres)
+      command: docker compose --profile controlplane up -d --build
+      args:
+        chdir: "{{ app_dest }}"
+      register: compose_result
+      changed_when: "'Creating' in compose_result.stdout or 'Starting' in compose_result.stdout or 'Building' in compose_result.stdout"
+      when: inventory_hostname in groups['k3s_control_plane']
+
+    - name: Byg og start containere (workers: kun app)
+      command: docker compose up -d --build
+      args:
+        chdir: "{{ app_dest }}"
+      register: compose_result
+      changed_when: "'Creating' in compose_result.stdout or 'Starting' in compose_result.stdout or 'Building' in compose_result.stdout"
+      when: inventory_hostname in groups['k3s_workers']
+
+- name: Nginx load balancer på control plane (round-robin til workers)
+  hosts: k3s_control_plane
+  become: true
+  tasks:
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: true
+
+    - name: Nginx upstream + proxy til workers
+      copy:
+        content: |
+          upstream proxi_backend {
+          {% for h in groups['k3s_workers'] %}
+            server {{ hostvars[h].ansible_host }}:3000;
+          {% endfor %}
+          }
+          server {
+            listen 80 default_server;
+            server_name _;
+            location / {
+              proxy_pass http://proxi_backend;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            }
+          }
+        dest: /etc/nginx/sites-available/proxi-lb
+        mode: "0644"
+
+    - name: Aktivér proxi-lb og deaktivér default
+      file:
+        src: /etc/nginx/sites-available/proxi-lb
+        dest: /etc/nginx/sites-enabled/proxi-lb
+        state: link
+      notify: Restart nginx
+
+    - name: Fjern default site fra enabled
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Restart nginx
+
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted

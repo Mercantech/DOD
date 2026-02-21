@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proxi – Koncepter og overblik</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <nav class="topnav">
+    <a href="#whoami">Live status</a>
+    <a href="#intro">Intro</a>
+    <a href="#terraform">Terraform</a>
+    <a href="#netvaerk">Netværk</a>
+    <a href="#ansible">Ansible</a>
+    <a href="#k3s">K3s & K8s</a>
+    <a href="#ressourcer">K8s-ressourcer</a>
+    <a href="#docker">Docker</a>
+    <a href="#diagrammer">Diagrammer</a>
+    <a href="#deploy">Deploy</a>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <h1>Proxi</h1>
+      <p class="tagline">Fra kode til kørende cluster – koncepter, teori og diagrammer</p>
+    </header>
+
+    <section class="whoami card" id="whoami" data-resource="pod">
+      <span class="resource-badge">Pod / Live</span>
+      <h2>Live: Hvilken node ramte du?</h2>
+      <p class="label">Pod / host</p>
+      <p class="host" id="host">—</p>
+      <p class="ip" id="ip">—</p>
+      <p class="db" id="db">—</p>
+      <p class="hint">Genindlæs siden – Traefik sender round-robin mellem alle tre noder.</p>
+    </section>
+
+    <section id="intro" class="card" data-resource="cluster">
+      <span class="resource-badge">Overblik</span>
+      <h2>Hvad er Proxi?</h2>
+      <p>Proxi er et lille, komplet eksempel på <strong>infrastruktur som kode</strong> og <strong>konfiguration som kode</strong>. Vi opretter ikke VM’er eller installerer software manuelt – alt er beskrevet i filer (Terraform, Ansible, Kubernetes YAML) og køres med få kommandoer. Resultatet er et 3-nodes K3s-cluster med Postgres og denne app, kørende på Proxmox.</p>
+      <p>Nedenfor gennemgår vi <strong>hvert koncept</strong>: hvad det er, hvad det bruges til, og hvordan vi bruger det i Proxi.</p>
+    </section>
+
+    <section id="terraform" class="card" data-resource="iac">
+      <span class="resource-badge">Infrastructure as Code</span>
+      <h2>Terraform & Proxmox</h2>
+      <h3>Infrastruktur som kode (IaC)</h3>
+      <p><strong>Terraform</strong> er et værktøj der læser beskrivelser af infrastruktur (filer i sproget HCL) og taler med en <em>provider</em> (her: Proxmox) for at oprette, opdatere eller slette ressourcer. I stedet for at klikke dig igennem et UI, skriver du fx &ldquo;jeg vil have 3 VM’er, klonet fra denne template, med disse netværksindstillinger&rdquo; – og Terraform sørger for at det passer.</p>
+      <h3>Proxmox VE</h3>
+      <p><strong>Proxmox Virtual Environment</strong> er en virtualiseringsplatform (typisk kørende på en fysisk server). Du kan oprette VM’er, templates, netværk, storage og backups. Proxmox har et webbaseret UI og en API – Terraform bruger API’en med et token til at styre VM’er automatisk.</p>
+      <h3>Hvad gør vi i Proxi?</h3>
+      <p>Vi bruger Terraform til at <strong>klone en færdig Ubuntu-template</strong> tre gange: én VM som K3s control plane og to som workers. Hver VM får statisk IP, 32 GB disk, cloud-init (bruger, SSH-nøgler, netværk) og password. Når du kører <code>terraform apply</code>, opretter eller opdaterer Terraform VM’erne; med <code>terraform destroy</code> slettes de igen. VM’ernes netværk er sat op med <strong>TRUNK og VLAN</strong> – se sektionen <a href="#netvaerk">Netværk</a>.</p>
+    </section>
+
+    <section id="netvaerk" class="card" data-resource="iac">
+      <span class="resource-badge">Netværk</span>
+      <h2>Netværkssetup: VLAN, TRUNK og VLAN-tag</h2>
+      <p>Proxi’s VM’er kører på Proxmox og får netværk via en <strong>TRUNK</strong>-bridge med trafik i <strong>VLAN 551</strong>. Her forklarer vi begreberne og hvorfor vi bruger et VLAN-tag.</p>
+
+      <h3>Hvad er et VLAN?</h3>
+      <p>Et <strong>VLAN</strong> (Virtual LAN) er et <em>logisk</em> netværk lagt oven på det fysiske. Switche og routere kan opdele trafik i VLAN’er ved hjælp af en <strong>VLAN-tag</strong> (et nummer, fx 1–4094) i pakkerne. Kun enheder i samme VLAN kan tale direkte med hinanden på lag 2; trafik mellem VLAN’er skal via en router. Det giver mulighed for at have flere adskilte net (fx 10.133.51.x i VLAN 551 og 10.0.100.x i VLAN 100) over samme kabler og switch-ports.</p>
+
+      <h3>Hvad er TRUNK?</h3>
+      <p>En <strong>TRUNK</strong>-port (eller trunk-link) er en port der <em>bærer trafik for flere VLAN’er samtidig</em>. Pakkerne er &ldquo;tagged&rdquo;: hver pakke har et VLAN-id, så modtageren ved hvilket logiske net den hører til. I modsætning hertil er en <strong>access</strong>-port typisk kun ét VLAN – trafikken er &ldquo;untagged&rdquo; og tilhører det ene net. Proxmox-hostens netværkskort er ofte forbundet til en switch-port konfigureret som TRUNK, så Proxmox (og VM’erne) kan sende og modtage trafik i flere VLAN’er over samme forbindelse.</p>
+
+      <h3>Hvorfor bruger vi et VLAN-tag i Proxi?</h3>
+      <p>I Proxi er VM’erne koblet til Proxmox’ <strong>virtuelle bridge &ldquo;TRUNK&rdquo;</strong>. Den bridge repræsenterer den fysiske TRUNK – den bærer altså trafik for mange VLAN’er. For at VM’ens trafik skal ende i det rigtige net (samme som Proxmox-hostens management-IP 10.133.51.119), skal VM’ens netværksinterface sende pakker <em>med VLAN-tag 551</em>. Uden tag (eller med forkert tag) ved switchen ikke hvilket VLAN pakken tilhører, og trafikken når ikke frem til 10.133.51.x-netværket.</p>
+      <p>I Terraform sætter vi derfor <code>vm_network_vlan_id = 551</code> (variablen <code>vm_network_vlan_id</code>) og bruger bridge <code>TRUNK</code>. Proxmox konfigurerer så VM’ens NIC til at sende og modtage trafik med VLAN 551. VM’erne får statiske IP’er i 10.133.51.x (fx .120, .121, .122) og gateway 10.133.51.1 – samme logiske net som Proxmox. Det er derfor vi bruger et VLAN-tag: så VM’erne er i det korrekte VLAN og kan kommunikere med Proxmox og hinanden.</p>
+
+      <h3>Kort opsummering</h3>
+      <ul class="concept-list">
+        <li><strong>VLAN</strong> – logisk netværk identificeret med et tag-nummer; adskiller trafik på samme fysiske infrastruktur.</li>
+        <li><strong>TRUNK</strong> – port/link der bærer flere VLAN’er med tagged trafik; Proxmox’ bridge &ldquo;TRUNK&rdquo; er koblet til sådan en.</li>
+        <li><strong>VLAN-tag</strong> – vi sætter <code>vlan_id = 551</code> på VM’ernes NIC, så deres trafik er i VLAN 551 (10.133.51.x) og kan nå Proxmox og gateway.</li>
+      </ul>
+    </section>
+
+    <section id="ansible" class="card" data-resource="config">
+      <span class="resource-badge">Configuration as Code</span>
+      <h2>Ansible</h2>
+      <h3>Konfiguration som kode</h3>
+      <p><strong>Ansible</strong> er et konfigurations- og automatiseringsværktøj. Det forbinder til servere via SSH (eller anden transport), og kører <em>tasks</em> beskrevet i YAML-filer (playbooks). Ansible ved ikke hvem der har oprettet serverne – den bruger bare en <strong>inventar</strong>-fil med hostnavne og IP’er. Det gør det nemt at bruge Terraform til at lave VM’er og Ansible til at konfigurere dem.</p>
+      <h3>Playbooks og inventory</h3>
+      <p>Et <strong>inventory</strong> er en liste af hosts (fx <code>k3s-cp-1</code>, <code>k3s-worker-1</code>) med IP’er og evt. variabler. En <strong>playbook</strong> siger &ldquo;kør disse tasks på disse hosts&rdquo; – fx &ldquo;på alle i gruppen k3s_cluster: installer pakker, kør dette script&rdquo;. Ansible er <em>idempotent</em>: du kan køre samme playbook igen uden at ødelægge noget.</p>
+      <h3>Hvad gør vi i Proxi?</h3>
+      <p>Vi har to hoved-playbooks: <strong>k3s.yml</strong> (installerer K3s server på control plane og K3s agent på workers, inkl. iptables og disk-tjek) og <strong>deploy-k8s.yml</strong> (bygger app-image, distribuerer det til alle noder, og applicerer Kubernetes-manifester med <code>kubectl apply</code>). Alt køres fra Proxmox, som kan SSH til VM’erne.</p>
+    </section>
+
+    <section id="k3s" class="card" data-resource="cluster">
+      <span class="resource-badge">Cluster</span>
+      <h2>Kubernetes, K8s og K3s</h2>
+
+      <h3>Hvad er Kubernetes?</h3>
+      <p><strong>Kubernetes</strong> (ofte forkortet <strong>K8s</strong> – &ldquo;K&rdquo; + 8 bogstaver + &ldquo;s&rdquo;) er en open-source platform til at køre og styre containeriserede applikationer. I stedet for at logge ind på servere og starte containere manuelt, beskriver du ønsket tilstand i YAML-filer: &ldquo;jeg vil have tre kopier af denne app, en database med persistent disk, og adgang fra udenfor på port 80&rdquo;. Kubernetes sørger for at starte pods på passende noder, genstarte ved fejl, og distribuere trafik. Centralt står en <strong>API server</strong>; hver node kører en <strong>kubelet</strong> og en container-runtime (fx containerd). Du styrer det hele med <code>kubectl</code> eller ved at ændre YAML og køre <code>kubectl apply</code>.</p>
+
+      <h3>Hvad betyder K8s?</h3>
+      <p><strong>K8s</strong> er bare en forkortelse af &ldquo;Kubernetes&rdquo;: K + (ubere) + s = K8s. Det bruges ofte i tekster og kommandosæt. Når nogen siger &ldquo;K8s&rdquo;, mener de altså Kubernetes generelt – platformen og standarden.</p>
+
+      <h3>Hvad er K3s?</h3>
+      <p><strong>K3s</strong> er en <em>letvægts-, certificeret Kubernetes-distribution</em> fra Rancher (SUSE). Den er bygget til at være nem at installere og kræve færre ressourcer. Navnet kommer af &ldquo;K&rdquo; + 3 bogstaver + &ldquo;s&rdquo; (K3s), og at den oprindeligt passede på &ldquo;half the size&rdquo;. K3s leveres som <strong>én binær</strong>: du kører én kommando, og du får et fungerende cluster med API server, kubelet, containerd, netværk (flannel) og ingress (Traefik) inkluderet. Ingen behov for at sætte etcd, kube-proxy eller ingress controller op separat – det er alt sammen pakket ind.</p>
+
+      <h3>Forskellen mellem K3s og &ldquo;almindelig&rdquo; Kubernetes (K8s)</h3>
+      <p>K3s <em>er</em> Kubernetes: den bruger samme API og samme YAML-ressourcer. Forskellen er <em>hvordan</em> du får et cluster:</p>
+      <ul class="concept-list">
+        <li><strong>Vanilla Kubernetes (K8s)</strong> – Du installerer typisk flere komponenter (API server, etcd, kubelet, kube-proxy, container-runtime, evt. ingress) enten manuelt eller via værktøjer som kubeadm. Mere fleksibilitet, men mere opsætning og ofte højere ressourceforbrug. Godt til store, enterprise-miljøer.</li>
+        <li><strong>K3s</strong> – Én binær, én kommando. Mindre disk og RAM, hurtig opstart. Inkluderer Traefik og flannel. Perfekt til VM’er, edge, homelabs og projekter som Proxi. Du får fuld Kubernetes-kompatibilitet uden at sætte hver del op selv.</li>
+      </ul>
+      <p>I Proxi vælger vi K3s fordi vi vil have et rigtigt Kubernetes-cluster på få VM’er uden at bruge tid på at samle alle K8s-komponenter. Vi kører <strong>K3s server</strong> på control plane (én node) og <strong>K3s agent</strong> på de to workers – sammen danner de ét cluster, og <code>kubectl</code> virker som forventet.</p>
+
+      <h3>Traefik (ingress i K3s)</h3>
+      <p>K3s medtager <strong>Traefik</strong> som standard <em>ingress controller</em>. Når du opretter en Kubernetes <strong>Ingress</strong>-ressource (fx &ldquo;send HTTP til / til service proxi-app&rdquo;), læser Traefik den og fungerer som reverse proxy – så brugerens anmodning rammer Traefik på port 80 og sendes videre til den rigtige pod.</p>
+    </section>
+
+    <section id="ressourcer" class="card" data-resource="resources">
+      <span class="resource-badge">K8s Resources</span>
+      <h2>Kubernetes-ressourcer vi bruger</h2>
+      <ul class="concept-list">
+        <li><strong>Namespace</strong> – Et virtuelt &ldquo;rum&rdquo; (fx <code>proxi</code>) så ressourcer kan grupperes og adskilles. Alle vores app- og DB-ressourcer ligger i <code>proxi</code>.</li>
+        <li><strong>Secret</strong> – Holder følsomme data (fx DB-password) som base64. Pods får dem som miljøvariabler eller filer. Vi bruger ét Secret til både Postgres og app.</li>
+        <li><strong>PersistentVolumeClaim (PVC)</strong> – &ldquo;Jeg har brug for X GB disk.&rdquo; Clusteret tildeler en volume; vi monterer den i Postgres-poden så data overlever genstart.</li>
+        <li><strong>Deployment</strong> – Beskriver en app: hvilket image, hvor mange replicas, env, ressourcer. Kubernetes holder antallet kørende og genstarter ved fejl. Vi har Deployment for Postgres (1 replica) og for proxi-app (3 replicas).</li>
+        <li><strong>Pod</strong> – Den mindste enhed: én eller flere containere der deler netværk og storage. Deployments opretter pods.</li>
+        <li><strong>Service</strong> – En fast netværksadresse (ClusterIP) til en gruppe pods. Andre pods kan forbinde til fx <code>proxi-db:5432</code>. Traefik sender HTTP til <code>proxi-app:80</code>.</li>
+        <li><strong>Ingress</strong> – Regler for indgående HTTP(S). Vores Ingress siger: alt på / går til service <code>proxi-app</code> på port 80. Traefik udfører det.</li>
+      </ul>
+    </section>
+
+    <section id="docker" class="card" data-resource="container">
+      <span class="resource-badge">Container</span>
+      <h2>Docker & containere</h2>
+      <h3>Containere</h3>
+      <p>En <strong>container</strong> er en isoleret proces(gruppe) der deler hostens kerne men har eget filsystem og netværk. Det gør det nemt at køre den samme app overalt (udvikling, test, produktion) uden &ldquo;det virker på min maskine&rdquo;-problemer. Kubernetes kører containere via en runtime (K3s bruger <strong>containerd</strong>).</p>
+      <h3>Docker & image</h3>
+      <p><strong>Docker</strong> bruges her primært til at <em>bygge</em> et image: vi har en Dockerfile der tager Node.js, kopierer vores <code>server.js</code> og <code>public/</code>, og laver et image <code>proxi-demo:latest</code>. Det image eksporteres til en tar-fil og importeres ind i K3s på alle noder – så Kubernetes kan starte pods med det. Selv kører appen i containerd, ikke i Docker.</p>
+    </section>
+
+    <section id="diagrammer" class="card" data-resource="diagram">
+      <span class="resource-badge">Diagram</span>
+      <h2>Diagrammer</h2>
+      <p class="intro">Nedenfor er flow og arkitektur tegnet med Mermaid. De viser hvordan alt hænger sammen.</p>
+
+      <h3>Fra kode til bruger</h3>
+      <p>Den overordnede kæde: Terraform opretter VM’er på Proxmox, Ansible konfigurerer dem (K3s + deploy), og brugerens browser rammer Traefik på en af noderne.</p>
+      <div class="mermaid">
+flowchart LR
+  subgraph Kode
+    TF[Terraform]
+    ANS[Ansible]
+    K8S[K8s YAML]
+  end
+  subgraph Proxmox
+    VM1[CP VM]
+    VM2[W1 VM]
+    VM3[W2 VM]
+  end
+  subgraph Cluster
+    API[K3s API]
+    TR[Traefik]
+    APP[App pods]
+  end
+  TF --> Proxmox
+  ANS --> VM1
+  ANS --> VM2
+  ANS --> VM3
+  VM1 --> API
+  K8S --> API
+  API --> TR
+  API --> APP
+  TR --> APP
+  Bruger((Bruger)) --> TR
+      </div>
+
+      <h3>K3s-cluster og pods</h3>
+      <p>Én control plane (API server, Traefik) og to workers. App-pods kan køre på alle tre; Postgres-poden (én replica) kan også placeres på <em>enhver</em> af de tre noder – vi har ingen nodeSelector, så Kubernetes vælger selv. I diagrammet er DB’en vist på worker-1 som eksempel; den kan lige så godt køre på control plane eller worker-2. Trafik ind på port 80 til en af noderne.</p>
+      <div class="mermaid">
+flowchart TB
+  subgraph CP["k3s-cp-1 (control plane)"]
+    API[API server]
+    TR[Traefik :80]
+    P1[proxi-app pod]
+  end
+  subgraph W1["k3s-worker-1"]
+    P2[proxi-app pod]
+    PG[postgres pod]
+  end
+  subgraph W2["k3s-worker-2"]
+    P3[proxi-app pod]
+  end
+  HTTP[HTTP :80] --> TR
+  TR --> P1
+  TR --> P2
+  TR --> P3
+  P1 --> DB[(proxi-db)]
+  P2 --> DB
+  P3 --> DB
+      </div>
+
+      <h3>Request-flow: browser → pod</h3>
+      <p>Brugeren anmoder om siden. Traefik modtager, slår Ingress op, sender til Service proxi-app, som round-robin til en af de tre app-pods.</p>
+      <div class="mermaid">
+sequenceDiagram
+  participant B as Browser
+  participant T as Traefik
+  participant S as Service proxi-app
+  participant P as App pod
+
+  B->>T: GET /
+  T->>T: Ingress-regel: / → proxi-app:80
+  T->>S: Forward
+  S->>P: Vælger en pod (round-robin)
+  P->>P: Evt. kald til proxi-db
+  P->>S: HTML/JSON
+  S->>T: Svar
+  T->>B: Svar
+      </div>
+
+      <h3>K8s-ressourcer i proxi-namespace</h3>
+      <p>Namespace, Secret, PVC, Deployments, Services og Ingress og deres relation.</p>
+      <div class="mermaid">
+flowchart LR
+  NS[Namespace: proxi]
+  SEC[Secret: proxi-db]
+  PVC[PVC: postgres-pvc]
+  DP1[Deployment: postgres]
+  DP2[Deployment: proxi-app]
+  SV1[Service: proxi-db]
+  SV2[Service: proxi-app]
+  IN[Ingress: proxi-app]
+
+  NS --> SEC
+  NS --> PVC
+  NS --> DP1
+  NS --> DP2
+  DP1 --> SV1
+  DP2 --> SV2
+  PVC --> DP1
+  SEC --> DP1
+  SEC --> DP2
+  SV2 --> IN
+      </div>
+    </section>
+
+    <section id="deploy" class="card" data-resource="deploy">
+      <span class="resource-badge">Deploy</span>
+      <h2>Sådan ruller vi ændringer ud</h2>
+      <ol class="steps">
+        <li>Redigér kode (<code>app/public/</code>, <code>server.js</code>) eller K8s-manifester (<code>app/k8s/</code>).</li>
+        <li>På Proxmox: <code>cd Proxi/Ansible && ansible-playbook -i inventory/hosts.ini playbooks/deploy-k8s.yml</code></li>
+        <li>Playbooken bygger nyt image, distribuerer til alle noder, applicerer YAML og genstarter app-pods (rolling update).</li>
+      </ol>
+      <p>Se <code>docs/Deploy-og-rollout.md</code> i repo’et for flere detaljer.</p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+  </script>
+</body>
+</html>

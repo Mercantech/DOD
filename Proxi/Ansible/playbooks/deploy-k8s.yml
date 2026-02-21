@@ -1,0 +1,130 @@
+---
+# Deploy Proxi app + Postgres til K3s (Deployments, Services, Ingress).
+# Forudsætter: K3s er installeret (server på control plane, agent på workers).
+# Kør fra Proxmox: ansible-playbook -i inventory/hosts.ini playbooks/deploy-k8s.yml
+#
+# Flow: Byg app-image på CP → distribuer image til alle noder → kubectl apply på CP.
+
+- name: Byg app-image på control plane og eksporter til tar
+  hosts: k3s_control_plane
+  become: true
+  vars:
+    app_src: "{{ playbook_dir }}/../../app"
+    build_dir: "/tmp/proxi-app-build"
+    image_tar: "/tmp/proxi-demo.tar"
+  tasks:
+    - name: Sæt Docker-pakker (Debian)
+      block:
+        - name: Install Docker prereqs
+          apt:
+            name: ["ca-certificates", "curl", "gnupg"]
+            state: present
+            update_cache: true
+        - name: Add Docker GPG key
+          apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            state: present
+        - name: Add Docker repo
+          apt_repository:
+            repo: "deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') }}] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+            state: present
+            filename: docker
+        - name: Install Docker
+          apt:
+            name: ["docker-ce", "docker-ce-cli", "containerd.io"]
+            state: present
+            update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Synk app-kilde til {{ build_dir }}
+      synchronize:
+        src: "{{ app_src }}/"
+        dest: "{{ build_dir }}"
+        delete: true
+
+    - name: Byg Docker-image proxi-demo:latest
+      command: docker build -t proxi-demo:latest .
+      args:
+        chdir: "{{ build_dir }}"
+
+    - name: Eksporter image til tar
+      command: docker save -o {{ image_tar }} proxi-demo:latest
+      register: save_out
+      changed_when: save_out.rc == 0
+
+    - name: Hent image-tar til Ansible control node (PVE)
+      fetch:
+        src: "{{ image_tar }}"
+        dest: "/tmp/proxi-fetch/"
+        flat: false
+
+- name: Importer image på alle K3s-noder
+  hosts: k3s_cluster
+  become: true
+  vars:
+    cp_host: "{{ groups['k3s_control_plane'][0] }}"
+    image_tar_remote: "/tmp/proxi-demo.tar"
+  tasks:
+    - name: Kopiér image-tar til node (fra PVE; bygget på CP i forrige play)
+      copy:
+        src: "/tmp/proxi-fetch/{{ cp_host }}/tmp/proxi-demo.tar"
+        dest: "{{ image_tar_remote }}"
+        mode: "0644"
+
+    - name: Importer image i K3s containerd
+      command: k3s ctr -n k8s.io images import {{ image_tar_remote }}
+      register: import_out
+      changed_when: import_out.rc == 0
+      failed_when: false  # Kan fejle hvis image allerede findes
+
+- name: Anvend K8s-manifests fra control plane
+  hosts: k3s_control_plane
+  become: true
+  vars:
+    k8s_src: "{{ playbook_dir }}/../../app/k8s"
+    k8s_dest: "/tmp/proxi-k8s"
+    kubeconfig: "/etc/rancher/k3s/k3s.yaml"
+  tasks:
+    - name: Kopiér k8s-manifester til node
+      copy:
+        src: "{{ k8s_src }}/"
+        dest: "{{ k8s_dest }}"
+        directory_mode: "0755"
+
+    - name: Opret namespace først (så resten finder proxi)
+      command: "kubectl --kubeconfig={{ kubeconfig }} apply -f {{ k8s_dest }}/namespace.yaml"
+      register: ns_apply
+      changed_when: "'created' in ns_apply.stdout or 'configured' in ns_apply.stdout"
+
+    - name: Opret Secret + Postgres + App + Ingress
+      command: "kubectl --kubeconfig={{ kubeconfig }} apply -f {{ k8s_dest }}"
+      register: kubectl_apply
+      changed_when: "'configured' in kubectl_apply.stdout or 'created' in kubectl_apply.stdout"
+
+    - name: Vent på Postgres rollout
+      command: "kubectl --kubeconfig={{ kubeconfig }} rollout status deployment/postgres -n proxi --timeout=120s"
+      register: roll_postgres
+      changed_when: false
+
+    - name: Vent på Proxi-app rollout
+      command: "kubectl --kubeconfig={{ kubeconfig }} rollout status deployment/proxi-app -n proxi --timeout=120s"
+      register: roll_app
+      changed_when: false
+
+    - name: Rollout restart proxi-app (så pods får nyt image ved genkørsel)
+      command: "kubectl --kubeconfig={{ kubeconfig }} rollout restart deployment/proxi-app -n proxi"
+      register: restart_app
+      changed_when: true
+
+    - name: Vent på restart af proxi-app
+      command: "kubectl --kubeconfig={{ kubeconfig }} rollout status deployment/proxi-app -n proxi --timeout=120s"
+      when: restart_app is changed
+
+    - name: Vis status
+      command: "kubectl --kubeconfig={{ kubeconfig }} get pods,svc,ingress -n proxi -o wide"
+      register: status
+      changed_when: false
+
+    - name: Udskriv status
+      debug:
+        var: status.stdout_lines

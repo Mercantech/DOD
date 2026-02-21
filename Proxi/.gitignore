@@ -41,5 +41,5 @@ app/.env
 npm-debug.log*
 .npm
 
-workspace.json
-app.json
+.obsidian/workspace.json
+.obsidian/app.json

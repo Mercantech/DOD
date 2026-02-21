@@ -1,0 +1,62 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxi-app
+  namespace: proxi
+  labels:
+    app: proxi-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: proxi-app
+  template:
+    metadata:
+      labels:
+        app: proxi-app
+    spec:
+      containers:
+        - name: app
+          image: proxi-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NODE_DB_HOST
+              value: "proxi-db"
+            - name: NODE_DB_PORT
+              value: "5432"
+            - name: NODE_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: proxi-db
+                  key: NODE_DB_USER
+            - name: NODE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: proxi-db
+                  key: NODE_DB_PASSWORD
+            - name: NODE_DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: proxi-db
+                  key: NODE_DB_NAME
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxi-app
+  namespace: proxi
+  labels:
+    app: proxi-app
+spec:
+  ports:
+    - port: 80
+      targetPort: 3000
+      name: http
+  selector:
+    app: proxi-app

@@ -1,0 +1,278 @@
+:root {
+  --bg: #0d1117;
+  --bg-subtle: #161b22;
+  --card: #161b22;
+  --card-border: rgba(255,255,255,0.06);
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  /* Kubernetes-inspired */
+  --k8s-blue: #326ce5;
+  --k8s-blue-dim: rgba(50, 108, 229, 0.25);
+  --success: #3fb950;
+  --warning: #d29922;
+  --resource-pod: #326ce5;
+  --resource-deploy: #6f42c1;
+  --resource-svc: #0e7490;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, var(--k8s-blue-dim), transparent),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-subtle) 100%);
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  padding-top: 5rem;
+}
+
+/* Navigation – Kubernetes dashboard-style */
+.topnav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--card-border);
+  padding: 0.65rem 1rem;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.topnav a {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.topnav a:hover {
+  color: var(--k8s-blue);
+  background: var(--k8s-blue-dim);
+}
+
+/* Hero – K8s-style header */
+.hero {
+  margin-bottom: 2rem;
+  padding: 0.5rem 0;
+}
+
+.hero h1 {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--text);
+  background: linear-gradient(135deg, var(--text) 0%, var(--k8s-blue) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero .tagline {
+  margin-bottom: 0;
+}
+
+/* Cards and sections – Kubernetes-style left border + badge */
+.card {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 2rem;
+  border: 1px solid var(--card-border);
+  border-left-width: 4px;
+  border-left-color: var(--k8s-blue);
+  position: relative;
+}
+
+.card[data-resource="pod"]   { border-left-color: var(--resource-pod); }
+.card[data-resource="iac"]   { border-left-color: #1f6feb; }
+.card[data-resource="config"]{ border-left-color: var(--warning); }
+.card[data-resource="cluster"]{ border-left-color: var(--k8s-blue); }
+.card[data-resource="resources"]{ border-left-color: var(--resource-deploy); }
+.card[data-resource="container"]{ border-left-color: var(--resource-svc); }
+.card[data-resource="diagram"]{ border-left-color: #6f42c1; }
+.card[data-resource="deploy"]{ border-left-color: var(--success); }
+
+.card .resource-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: rgba(255,255,255,0.06);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.card h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: var(--text);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.card h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem 0;
+  color: var(--accent);
+}
+
+.card p {
+  margin: 0 0 0.75rem 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+}
+
+.concept-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.concept-list li {
+  margin-bottom: 0.75rem;
+}
+
+.steps {
+  margin: 0 0 1rem 0;
+  padding-left: 1.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.steps li {
+  margin-bottom: 0.5rem;
+}
+
+/* Mermaid diagrams – K8s card style */
+.mermaid {
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem 0;
+}
+
+.tagline {
+  color: var(--muted);
+  margin: 0 0 2rem 0;
+}
+
+.whoami.card {
+  padding: 1.5rem 1.75rem;
+}
+
+.whoami .label {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0 0 0.25rem 0;
+}
+
+.whoami .host {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 0.25rem 0;
+}
+
+.whoami .ip {
+  font-family: ui-monospace, monospace;
+  font-size: 1rem;
+  color: var(--muted);
+  margin: 0 0 0.25rem 0;
+}
+
+.whoami .db {
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem 0;
+}
+
+.whoami .db.ok { color: #3fb950; }
+.whoami .db.error { color: #f85149; }
+
+.whoami .hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.setup h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem 0;
+}
+
+.setup ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.setup li {
+  margin-bottom: 0.5rem;
+}
+
+/* Stack & rollout sections */
+.card .intro {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1rem 0;
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 0.85em;
+  background: rgba(50, 108, 229, 0.12);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  border: 1px solid var(--k8s-blue-dim);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
