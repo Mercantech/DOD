@@ -1,0 +1,41 @@
+# Eksempel til Dag 3 – Database i container med Compose
+# Se teori: Database-med-Docker.md, Volumes-og-data.md, Docker-Compose.md
+# Kør: docker compose up -d
+# Stop: docker compose down (data i pgdata bevares)
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: proxi
+      POSTGRES_PASSWORD: proxi
+      POSTGRES_DB: proxi
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U proxi -d proxi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Valgfri: app der forbinder til db (uncomment og tilpas build-contekst)
+  # app:
+  #   build: ../backend
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     NODE_DB_HOST: db
+  #     NODE_DB_PORT: "5432"
+  #     NODE_DB_USER: proxi
+  #     NODE_DB_PASSWORD: proxi
+  #     NODE_DB_NAME: proxi
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+volumes:
+  pgdata:

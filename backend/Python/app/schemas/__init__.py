@@ -1,0 +1,2 @@
+# Eksponér schema-pakken.
+

@@ -1,0 +1,72 @@
+{
+  "collapse-filter": true,
+  "search": "",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": true,
+  "colorGroups": [
+    {
+      "query": "tag:#docker  ",
+      "color": {
+        "a": 1,
+        "rgb": 5526240
+      }
+    },
+    {
+      "query": "path:\"Noter/DoD - Pensum\"  ",
+      "color": {
+        "a": 1,
+        "rgb": 9366252
+      }
+    },
+    {
+      "query": "path:Proxi  ",
+      "color": {
+        "a": 1,
+        "rgb": 14382628
+      }
+    },
+    {
+      "query": "tag:#cicd  ",
+      "color": {
+        "a": 1,
+        "rgb": 5832280
+      }
+    },
+    {
+      "query": "tag:#nginx-https  ",
+      "color": {
+        "a": 1,
+        "rgb": 13184541
+      }
+    },
+    {
+      "query": "tag:#sikkerhed  ",
+      "color": {
+        "a": 1,
+        "rgb": 13051125
+      }
+    },
+    {
+      "query": "tag:#dns-firewall  ",
+      "color": {
+        "a": 1,
+        "rgb": 1842301
+      }
+    }
+  ],
+  "collapse-display": true,
+  "showArrow": false,
+  "textFadeMultiplier": -3,
+  "nodeSizeMultiplier": 1.22750865051903,
+  "lineSizeMultiplier": 1.10882352941176,
+  "collapse-forces": true,
+  "centerStrength": 0.295847750865052,
+  "repelStrength": 10.4152249134948,
+  "linkStrength": 0.78719723183391,
+  "linkDistance": 285,
+  "scale": 0.5723039124352576,
+  "close": false
+}
