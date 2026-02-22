@@ -12,7 +12,7 @@ Vellykket output: `pong` fra alle tre hosts (k3s-cp-1, k3s-worker-1, k3s-worker-
 
 VM'erne er i **VLAN 551**; din PC er typisk på et andet net, så SSH fra PC til VM'erne når ikke frem. **Kør Ansible fra Proxmox** i stedet – Proxmox er i samme net som VM'erne.
 
-**Fra Proxmox (pve):** 
+**Fra Proxmox (pve):**
 ```bash
 # SSH ind på Proxmox fra din PC:  ssh root@10.133.51.119
 

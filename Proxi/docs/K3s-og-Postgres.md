@@ -1,9 +1,5 @@
 # K3s og Postgres – hvordan det hænger sammen
 
-**Relateret kursusstof:** [[Dag-09-Volumes-Dokploy-og-Kubernetes]] (K3s, PVC, Services), [[Dag-07-Docker-Compose]] (multi-container, service-navne), [[Dag-03-Database-Setup-med-Docker]]. Overblik: [[Proxi-demo]].
-
----
-
 ## Nuværende setup (Docker på VM’er)
 
 - **Terraform** kloner VM’er (1 control plane, 2 workers) med statisk net (VLAN 551).
@@ -28,5 +24,3 @@ Med K3s vil du typisk:
 4. **Ingress / LoadBalancer:** I stedet for nginx på control plane kan du bruge K3s’ indbyggede Traefik Ingress eller fx MetalLB som LoadBalancer og lade trafikken gå til app-Service, som round-robin til pod’erne.
 
 Kort sagt: samme idé – én fælles database, flere app-instanser, load-balanced adgang – men med Kubernetes-ressourcer (Deployment, Service, Ingress, evt. StatefulSet + PVC) i stedet for Docker Compose og nginx på én VM.
-
-Se **[[Koncepter-og-overblik]]** og **[[Deploy-og-rollout]]** for Proxi’s konkrete flow.

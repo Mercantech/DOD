@@ -2,8 +2,6 @@
 
 Denne fil er en reference til de koncepter og værktøjer vi bruger i Proxi. Den levende version med diagrammer er forsiden på appen (http://10.133.51.120 eller via SSH-tunnel).
 
-**I kurset:** Proxi bruges som demo på Dag 9 – se [[Proxi-demo]] og [[Dag-09-Volumes-Dokploy-og-Kubernetes]]. [[Program]] giver overblik over hele forløbet.
-
 ---
 
 ## Hvad er Proxi?
@@ -52,7 +50,7 @@ Proxi er et lille, komplet eksempel på **infrastruktur som kode** og **konfigur
 
 ## Docker & containere
 
-- **Containere** – Isolerede processer med eget filsystem; deler kerne. Samme image kører overalt. (Se [[Dag-06-Docker-grundlæggende]] for Docker og images.)
+- **Containere** – Isolerede processer med eget filsystem; deler kerne. Samme image kører overalt.
 - **Docker** – I Proxi bruger vi Docker til at *bygge* image (Dockerfile → proxi-demo:latest). Image eksporteres til tar og importeres i K3s (containerd); selve kørsel sker i Kubernetes, ikke Docker.
 
 ---
@@ -74,11 +72,4 @@ Se forsiden på appen for Mermaid-diagrammer der viser:
 2. Kør fra Proxmox: `ansible-playbook -i inventory/hosts.ini playbooks/deploy-k8s.yml`
 3. Playbooken bygger image, distribuerer, applicerer manifester og genstarter app-pods.
 
-Se **[[Deploy-og-rollout]]** for detaljer.
-
----
-
-## Se også
-
-- **[[Proxi-demo]]** – Proxi’s plads i kurset og links til dag-noter.
-- **[[Dag-09-Volumes-Dokploy-og-Kubernetes]]** – Volumes, PVC og K8s-ressourcer med Proxi-eksempler.
+Se **Deploy-og-rollout.md** for detaljer.

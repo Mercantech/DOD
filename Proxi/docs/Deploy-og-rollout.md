@@ -1,9 +1,5 @@
 # Deploy og rollout – hvordan vi ruller ændringer ud
 
-**I kurset:** Deployment fra kode/kontroller – sammenlign med [[Dag-08-Dokploy-og-GitHub]] (Git push → Dokploy deploy) og [[CICD og GitHubActions]]. K3s og ressourcer: [[Dag-09-Volumes-Dokploy-og-Kubernetes]]. Overblik over Proxi: [[Proxi-demo]], [[Koncepter-og-overblik]].
-
----
-
 ## Kort flow
 
 1. **Ændringer** – Redigér app-kode (`app/`), K8s-manifester (`app/k8s/`) eller Ansible-playbooks.
@@ -62,15 +58,3 @@ ssh ubuntu@10.133.51.120 'sudo kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml ro
 - **Fra bærbar (kun SSH til Proxmox):**  
   `ssh -L 8080:10.133.51.120:80 root@<proxmox-ip>`  
   Derefter: http://localhost:8080
-
----
-
-## Se også
-
-- **[[Proxi-demo]]** – Proxi i kurset. **[[Koncepter-og-overblik]]** – koncepter. **[[K3s-og-Postgres]]** – Docker vs. K3s setup.
-
----
-
-## Se også
-
-- **[[Proxi-demo]]** – Proxi i kurset. **[[Koncepter-og-overblik]]** – koncepter. **[[K3s-og-Postgres]]** – Docker vs. K3s setup.
