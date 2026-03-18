@@ -38,6 +38,7 @@ logs/
 # App / Node
 node_modules/
 app/.env
+.env
 npm-debug.log*
 .npm
 

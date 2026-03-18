@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Discord Bot UI</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Discord Bot Skeleton</h1>
+
+      <section id="status">
+        <h2>API status</h2>
+        <button id="check-health">Tjek API health</button>
+        <pre id="health-output"></pre>
+      </section>
+
+      <section id="todos">
+        <h2>Todos</h2>
+
+        <div class="user-bar">
+          <label for="user-id">Bruger-id (demo)</label>
+          <input
+            type="text"
+            id="user-id"
+            placeholder="Fx: mathias / elev-1 / 123..."
+            autocomplete="off"
+          />
+          <button id="save-user" type="button">Brug</button>
+        </div>
+
+        <form id="todo-form">
+          <input
+            type="text"
+            id="todo-title"
+            placeholder="Ny todo..."
+            required
+          />
+          <button type="submit">Tilføj</button>
+        </form>
+
+        <ul id="todo-list"></ul>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
